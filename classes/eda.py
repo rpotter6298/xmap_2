@@ -8,6 +8,7 @@ import numpy as np
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
 import logging
+import plotly.graph_objects as go
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -320,7 +321,7 @@ class Visualizer:
         """
         pass
 
-    def plot_correlation_heatmap(self, correlation_df: pd.DataFrame, title: str, cmap: str = "coolwarm",
+    def plot_correlation_heatmap(self, correlation_matrix: pd.DataFrame, title: str, sort_by_mean=True, cmap: str = "coolwarm",
                                   annot: bool = True, fmt: str = ".2f", cbar_label: str = "Correlation"):
         """
         Plots a heatmap for the provided correlation DataFrame.
@@ -333,10 +334,20 @@ class Visualizer:
             fmt (str, optional): String formatting code for annotations. Defaults to ".2f".
             cbar_label (str, optional): Label for the color bar. Defaults to "Correlation".
         """
+        if sort_by_mean:
+            # Compute the mean of each column in the correlation matrix
+            mean_correlations = correlation_matrix.mean().sort_values(ascending=False)
+            logging.info("Computed mean correlations for each protein.")
+
+            # Sort the correlation matrix based on the sorted mean correlations
+            sorted_corr = correlation_matrix.loc[:, mean_correlations.index]
+            logging.info("Correlation matrix sorted based on mean correlation coefficients.")
+        else:
+            sorted_corr = correlation_matrix.copy()
         try:
             plt.figure(figsize=(14, 10))
             sns.heatmap(
-                correlation_df,
+                sorted_corr,
                 annot=annot,
                 fmt=fmt,
                 cmap=cmap,
@@ -352,6 +363,65 @@ class Visualizer:
         except Exception as e:
             logging.error(f"Error plotting correlation heatmap: {e}")
 
+    def plot_clustered_heatmap(self, correlation_matrix: pd.DataFrame,
+                                clean_names: bool = True,
+                                title: str = "Clustered Correlation Heatmap",
+                                cmap: str = "coolwarm",
+                                linewidths: float = 0.5,
+                                figsize: tuple = (12, 12),
+                                dendrogram_ratio: float = 0.2,
+                                cbar_ratio: float = 0.05,
+                                row_cluster: bool = True,
+                                col_cluster: bool = True,
+                                method: str = 'average',
+                                metric: str = 'euclidean',
+                                color_threshold: float = None):
+        """
+        Plots a clustered correlation heatmap with dendrograms using Seaborn's clustermap.
+
+        Args:
+            correlation_matrix (pd.DataFrame): DataFrame containing correlation coefficients.
+            title (str, optional): Title of the heatmap. Defaults to "Clustered Correlation Heatmap".
+            cmap (str, optional): Color map for the heatmap. Defaults to "coolwarm".
+            linewidths (float, optional): Width of the lines that will divide each cell. Defaults to 0.5.
+            figsize (tuple, optional): Size of the figure. Defaults to (12, 12).
+            dendrogram_ratio (float, optional): Ratio of the dendrogram height to the total figure. Defaults to 0.2.
+            cbar_ratio (float, optional): Ratio of the colorbar width to the total figure. Defaults to 0.05.
+            row_cluster (bool, optional): Whether to cluster rows. Defaults to True.
+            col_cluster (bool, optional): Whether to cluster columns. Defaults to True.
+            method (str, optional): Linkage method for clustering. Defaults to 'average'.
+            metric (str, optional): Distance metric for clustering. Defaults to 'euclidean'.
+            color_threshold (float, optional): Threshold to apply color coding based on distance. Defaults to None.
+        """
+        # Perform hierarchical clustering and plot the clustermap
+        if clean_names:
+            correlation_matrix.columns = [col.split("_")[0] for col in correlation_matrix.columns]
+        try:
+            g = sns.clustermap(correlation_matrix,
+                               cmap=cmap,
+                               linewidths=linewidths,
+                               figsize=figsize,
+                               dendrogram_ratio=(dendrogram_ratio, dendrogram_ratio),
+                               cbar_pos=(0.02, 0.8, cbar_ratio, 0.18),
+                               row_cluster=row_cluster,
+                               col_cluster=col_cluster,
+                               method=method,
+                               metric=metric,
+                               #color_threshold=color_threshold,
+                               annot=False,
+                               fmt=".2f",
+                               xticklabels=True,
+                               square=True)
+  
+            # Set the title by adjusting the figure's suptitle
+            plt.title(title, fontsize=20, pad=20)
+
+            #plt.show()
+            return plt
+            logging.info("Clustered heatmap generated successfully.")
+        except Exception as e:
+            logging.error(f"An error occurred while generating the clustered heatmap: {e}")
+        
     def plot_distribution(self, data: pd.Series, title: str, xlabel: str = "Values",
                           ylabel: str = "Frequency"):
         """
@@ -586,6 +656,133 @@ class Visualizer:
 
             return report_df
 
+    def plot_protein_boxplots_by_category(
+        self,
+        variable: str,
+        protein_data: pd.DataFrame,
+        patient_data: pd.DataFrame,
+        t_test_results: pd.DataFrame = None,
+        mapping_dict: dict = None,
+        p_value_threshold: float = 0.05,
+        figsize: tuple = (20, 10),
+        palette: str = "Set2",
+        save_path: str = None,
+        max_proteins_per_plot: int = 20,
+        clean_names: bool = True
+    ):
+        """
+        Generates box plots for protein expressions split by a binary or categorical patient variable.
+        Optionally filters proteins based on statistical significance from t-test results.
+
+        Args:
+            variable (str): The name of the binary or categorical variable in patient_data to split the box plots by.
+            protein_data (pd.DataFrame): DataFrame containing protein expression data (samples x proteins).
+            patient_data (pd.DataFrame): DataFrame containing patient data (samples x attributes).
+            t_test_results (pd.DataFrame, optional): DataFrame containing t-test results with proteins as index.
+            mapping_dict (dict, optional): Dictionary to map variable categories to desired labels.
+                                           Example: {"Sex": {0: "Female", 1: "Male"}}
+            p_value_threshold (float, optional): Threshold for p-values to consider significance. Defaults to 0.05.
+            figsize (tuple, optional): Size of the figure. Defaults to (20, 10).
+            palette (str, optional): Color palette for the box plots. Defaults to "Set2".
+            save_path (str, optional): Base file path to save the plot. If None, the plot is not saved.
+            max_proteins_per_plot (int, optional): Maximum number of proteins per plot to ensure readability.
+                                                  Defaults to 20.
+        """
+        try:
+            # 1. Validate that the variable exists in patient_data
+            if variable not in patient_data.columns:
+                logging.error(f"Variable '{variable}' not found in patient data.")
+                return
+
+            # 2. Check if the variable is binary or categorical
+            unique_values = patient_data[variable].dropna().unique()
+            num_unique = len(unique_values)
+            if num_unique < 2:
+                logging.error(f"Variable '{variable}' must have at least two unique values.")
+                return
+            elif num_unique == 2:
+                var_type = 'binary'
+            else:
+                var_type = 'categorical'
+
+            logging.info(f"Variable '{variable}' identified as {var_type} with values: {unique_values.tolist()}")
+
+            # 3. If t_test_results is provided, filter proteins based on p-value
+            if t_test_results is not None:
+                p_value_col = f"{variable}_p_value"
+                if p_value_col not in t_test_results.columns:
+                    logging.error(f"P-value column '{p_value_col}' not found in t_test_results.")
+                    return
+                # Select proteins with p-value below the threshold
+                significant_proteins = t_test_results[t_test_results[p_value_col] < p_value_threshold].index.tolist()
+                if not significant_proteins:
+                    logging.warning(f"No proteins found with p-value below {p_value_threshold} for variable '{variable}'.")
+                    return
+                protein_data = protein_data[significant_proteins]
+                logging.info(f"Selected {len(significant_proteins)} significant proteins for plotting based on p-value < {p_value_threshold}.")
+            else:
+                logging.info("No t_test_results provided. Plotting all proteins.")
+
+            # 4. Align the indices of protein_data and patient_data
+            combined_data = protein_data.merge(patient_data[[variable]], left_index=True, right_index=True, how='inner')
+            logging.info(f"Combined data shape after merging: {combined_data.shape}")
+
+            # 5. Melt the protein data to long format for seaborn
+            melted_data = combined_data.reset_index(drop=True).melt(id_vars=variable, var_name='Protein', value_name='Expression')
+            logging.info(f"Melted data shape: {melted_data.shape}")
+
+            # 6. Prepare legend labels if mapping_dict is provided
+            if mapping_dict and variable in mapping_dict:
+                # Create a labels list based on unique values in the data
+                labels = [mapping_dict[variable].get(val, val) for val in unique_values]
+                # Create a mapping from original value to label
+                value_to_label = mapping_dict[variable]
+                logging.info(f"Mapping for variable '{variable}': {value_to_label}")
+            else:
+                value_to_label = None
+                logging.info(f"No mapping_dict provided or '{variable}' not in mapping_dict. Using original labels.")
+
+            # 7. Handle large number of proteins by plotting in batches if necessary
+            total_proteins = melted_data['Protein'].nunique()
+            num_plots = (total_proteins // max_proteins_per_plot) + int(total_proteins % max_proteins_per_plot > 0)
+            logging.info(f"Total proteins: {total_proteins}. Number of plots to generate: {num_plots}")
+
+            for i in range(num_plots):
+                # Select a subset of proteins for the current plot
+                proteins_subset = melted_data['Protein'].unique()[i*max_proteins_per_plot : (i+1)*max_proteins_per_plot]
+                subset_data = melted_data[melted_data['Protein'].isin(proteins_subset)]
+                if clean_names:
+                    subset_data['Protein'] = subset_data['Protein'].apply(lambda x: x.split("_")[0])
+                # Create the box plot
+                plt.figure(figsize=figsize)
+                sns.boxplot(x='Protein', y='Expression', hue=variable, data=subset_data, palette=palette)
+                plt.title(f"Protein Expression by {variable} (Proteins {i*max_proteins_per_plot + 1}-{min((i+1)*max_proteins_per_plot, total_proteins)})", fontsize=16)
+                plt.xlabel("Protein", fontsize=14)
+                plt.ylabel("Expression Level", fontsize=14)
+                plt.xticks(rotation=90)
+
+                # Adjust legend labels if mapping_dict was used
+                if value_to_label:
+                    # Get current legend handles and labels
+                    handles, labels = plt.gca().get_legend_handles_labels()
+                    # Map the original labels to new labels using value_to_label
+                    new_labels = [value_to_label.get(float(label), label) if isinstance(label, (int, float, str)) and str(label).isdigit() else label for label in labels]
+                    plt.legend(handles, new_labels, title=variable, bbox_to_anchor=(1.05, 1), loc='upper left')
+                    logging.info(f"Legend labels have been updated based on mapping_dict for variable '{variable}'.")
+                else:
+                    plt.legend(title=variable, bbox_to_anchor=(1.05, 1), loc='upper left')
+
+                plt.tight_layout()
+
+                # Save the plot if a save_path is provided
+                if save_path:
+                    plot_filename = f"{save_path}_boxplot_part_{i+1}.png"
+                    plt.savefig(plot_filename, dpi=300, bbox_inches='tight')
+                    logging.info(f"Box plot saved to '{plot_filename}'.")
+
+                plt.show()
+        except Exception as e:
+            logging.error(f"An error occurred while plotting box plots by category: {e}")
 
 class GroupComparator:
     """

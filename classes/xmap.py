@@ -10,7 +10,7 @@ from classes.normalizer import Normalizer
 from classes.openai_calls import xmap_openai
 from classes.xmap_qc import xmap_qc
 import json
-from classes.Eda import GroupComparator
+from classes.eda import GroupComparator
 import logging
 import seaborn as sns
 import matplotlib.pyplot as plt

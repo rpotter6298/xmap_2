@@ -3,13 +3,15 @@ import pandas as pd
 
 # Step 1: Initialize the study
 #study = xmap_study(study_report_xls="data/02_assay_data.xlsx", control_cols=slice(-4, None))
-study2 = xmap_study(study_report_xls="data/02_assay_data.xlsx", control_cols=slice(-4, None))
-study2.patient_data = study.patient_data
-study2.patient_data_coldic = study.patient_data_coldic
-study = study2
+study = xmap_study(study_report_xls="data/02_assay_data.xlsx", control_cols=slice(-4, None))
+
 # Step 2: Attach patient data
 patient_data = pd.read_excel("data/02_patient_data_cleaned.xlsx", index_col=0)
 study.attach_patient_data(patient_data)
+#remove any * in the colnames of the adj_mfi_data
+study.adj_mfi_data.columns = study.adj_mfi_data.columns.str.replace("*", "")
+study.adj_mfi_data.columns = study.adj_mfi_data.columns.str.replace("-", "_")
+
 
 # Step 3: Normalize the data
 normalizer = Normalizer()
@@ -41,28 +43,47 @@ kendall_tau_corr = correlation_analyzer.kendall_tau_correlation(continuous_cols)
 pearson_corr = correlation_analyzer.pearson_correlation(continuous_cols)
 spearman_corr = correlation_analyzer.spearman_correlation(continuous_cols)
 anova_f_stat = correlation_analyzer.anova_f_statistic(multi_level_cols)
-
+ 
 # Compute Protein-Protein Correlations
 protein_protein_corr = correlation_analyzer.protein_protein_correlation(method='pearson')  # Change method as needed
-
 # Step 6: Visualize Correlations
 visualizer = Visualizer()
-visualizer.plot_correlation_heatmap(point_biserial_corr, title="Point-Biserial Correlation Heatmap", cbar_label="Correlation Coefficient")
-visualizer.plot_correlation_heatmap(kendall_tau_corr, title="Kendall's Tau Correlation Heatmap", cbar_label="Correlation Coefficient")
-visualizer.plot_correlation_heatmap(pearson_corr, title="Pearson Correlation Heatmap", cbar_label="Correlation Coefficient")
-visualizer.plot_correlation_heatmap(spearman_corr, title="Spearman Correlation Heatmap", cbar_label="Correlation Coefficient")
-visualizer.plot_correlation_heatmap(anova_f_stat, title="ANOVA F-Statistic Heatmap", cmap="YlGnBu", cbar_label="F-Statistic")
-visualizer.plot_correlation_heatmap(protein_protein_corr, title="Protein-Protein Pearson Correlation Heatmap", cmap="coolwarm", cbar_label="Correlation Coefficient")
+visualizer.plot_clustered_heatmap(protein_protein_corr, figsize=(24,12),title="Spearman Correlation Heatmap", cmap="coolwarm").savefig("plots/correlation_proteins_spearman.png", dpi=300)
+visualizer.plot_clustered_heatmap(point_biserial_corr, figsize=(24,12), title="Point-Biserial Correlation Heatmap", row_cluster=False, cmap="coolwarm").savefig("plots/correlation_point_biserial.png", dpi=300)
+visualizer.plot_clustered_heatmap(kendall_tau_corr, figsize=(24,12), title="Kendall's Tau Correlation Heatmap", row_cluster=False, cmap="coolwarm").savefig("plots/correlation_kendall_tau.png", dpi=300)
+visualizer.plot_clustered_heatmap(pearson_corr, figsize=(24,12), title="Pearson Correlation Heatmap", row_cluster=False, cmap="coolwarm").savefig("plots/correlation_pearson.png", dpi=300)
+visualizer.plot_clustered_heatmap(spearman_corr, figsize=(24,12), title="Spearman Correlation Heatmap", row_cluster=False, cmap="coolwarm").savefig("plots/correlation_spearman.png", dpi=300)
+visualizer.plot_clustered_heatmap(anova_f_stat, figsize=(24,12), title="ANOVA F-Statistic Heatmap", row_cluster=False, cmap="coolwarm").savefig("plots/correlation_anova_f_stat.png", dpi=300)
 
-# Step 7: Aggregate Data Analysis (Loop through binary columns)
-# Initialize an empty DataFrame to store all t-test results
-mapping_dict = {"Sex" : {"Male":1, "Female":0}}
 t_test_results = study.binary_t_test(binary_cols, cleaned_proteins, mapping_dict=mapping_dict)
-
-
+mapping_dict = {"Sex": {0:"Female", 1:"Male"}}
 visualizer.plot_volcano_3d_with_labels(t_test_results, binary_cols, p_value_threshold=0.05)
+visualizer.plot_protein_boxplots_by_category(
+    variable="Sex",
+    protein_data=study.normalized_data,
+    patient_data=study.patient_data,
+    figsize=(25, 12),
+    palette="Set2",
+    t_test_results=t_test_results,
+    mapping_dict=mapping_dict,
+    save_path="plots/protein_boxplots_sex"
+)
+visualizer.plot_protein_boxplots_by_category(
+    variable = "Diabetes",
+    protein_data=study.normalized_data,
+    patient_data=study.patient_data,
+    figsize=(25,12),
+    palette="Set2",
+    t_test_results=t_test_results,
+    mapping_dict=mapping_dict,
+    save_path="plots/protein_boxplots_diabetes"
+)
+
 t_test_report = visualizer.generate_significant_report(t_test_results, binary_cols, p_value_threshold=0.05)
-print("")
+
+
+
+
 # # Step 7: Aggregate Data Analysis (e.g., Compare Means Between Groups)
 # group_comparator = GroupComparator(cleaned_proteins, study.patient_data['Sex'])
 # # Perform t-tests between 'Male' and 'Female'

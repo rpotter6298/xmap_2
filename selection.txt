@@ -1,0 +1,68 @@
+   Antigen     Corresponding Gene
+HPRA000767                  DGCR2
+HPRA001197                   IL6R
+HPRA002363                   VAV2
+HPRA003490                 ANXA10
+HPRA003532                   GLI3
+HPRA003950                    ME1
+HPRA004387                 CAPZA2
+HPRA004817                   EEF2
+HPRA005621                   ANK2
+HPRA006876                   FUT2
+HPRA009650                  PSIP1
+HPRA011757  PTGES3L-AARSD1,AARSD1
+HPRA013060  PTGES3L-AARSD1,AARSD1
+HPRA013573                   SELE
+HPRA013851                   SELE
+HPRA016238                 PCDHB6
+HPRA016940      SGK494,AC005726.1
+HPRA017192                   CDH5
+HPRA017982                  BTBD6
+HPRA019035                   LGSN
+HPRA019333                   IL6R
+HPRA019334                   IL6R
+HPRA019926                  LOXL3
+HPRA020521                 ANKRD6
+HPRA020522                 ANKRD6
+HPRA021045                  LOXL2
+HPRA021736                    ADK
+HPRA021737                    ADK
+HPRA021969           CRYAA,CRYAA2
+HPRA022019                 TMEM9B
+HPRA022506                 IQSEC1
+HPRA022890                TBC1D9B
+HPRA022891                TBC1D9B
+HPRA024016                 CCDC83
+HPRA026116                   IL6R
+HPRA029223                TBC1D9B
+HPRA030263         EHD4,EHD1,EHD3
+HPRA034083                    LOX
+HPRA037260                   IL6R
+HPRA041077                    VIM
+HPRA042751 PTGES3L-AARSD1,PTGES3L
+HPRA042769                 SGK494
+HPRA042866                 IQSEC1
+HPRA043989                 CCDC47
+HPRA045184                   SCG5
+HPRA045223                 RHBDD2
+HPRA045322                  ZNF24
+HPRA045342                   SCG2
+HPRA045372                 CCDC83
+HPRA045483                   CDH5
+HPRA045605                 CLTCL1
+HPRA045626                   TOB2
+HPRA045658                 DBNDD1
+HPRA045754                MSANTD4
+HPRA045786                  CCNI2
+HPRA045993          CAPZA2,CAPZA1
+HPRA046120      PALM2-AKAP2,PALM2
+HPRA046255                   VAV2
+HPRA047028                  STMN4
+
+
+
+Selected additional genes to target (need antigens for):
+ACTB, AGPAT1, ARF5, AUP1, BBS10, CACNA1A, CFTR, CLTC, CRYAB, CTNNB1
+CYP39A1, DCUN1D4, ENDOV, GAS7, GRIA3, HSPB6, HYOU1, KIF1A, LOXL1, MAPK8IP3
+PDK4, PHGDH, POMP, RBMS3, RNF150, S100A2, SEMA6A, SERPINH1, SOD3, SOX5
+TMEM136, TMEM59L, VCP

@@ -557,15 +557,28 @@ class regression_controller:
         x_main_const = sm.add_constant(x_main, has_constant="add")
         x_holdout_const = sm.add_constant(x_holdout, has_constant="add")
 
+
         if backward_elimination:
             final_model = self.backward_elimination_aic(x_main_const, y_main)
-             # Get the columns used in the final model (after backward elimination)
-            selected_columns = X_train_const[:, final_model.model.exog_names].shape[1]
-            x_holdout_const = x_holdout_const[:, :selected_columns]
+            # Get the number of selected columns (including the constant)
+            selected_columns_count = final_model.model.exog.shape[1]
+            # Slice the holdout set to include only the selected columns
+            x_holdout_const = x_holdout_const[:, :selected_columns_count]
+            # Predict using the final model
             y_holdout_pred = final_model.predict(x_holdout_const)
         else:
             final_model = sm.OLS(y_main, x_main_const).fit()
             y_holdout_pred = final_model.predict(x_holdout_const)
+
+        # if backward_elimination:
+        #     final_model = self.backward_elimination_aic(x_main_const, y_main)
+        #      # Get the columns used in the final model (after backward elimination)
+        #     selected_columns = X_train_const[:, final_model.model.exog_names].shape[1]
+        #     x_holdout_const = x_holdout_const[:, :selected_columns]
+        #     y_holdout_pred = final_model.predict(x_holdout_const)
+        # else:
+        #     final_model = sm.OLS(y_main, x_main_const).fit()
+        #     y_holdout_pred = final_model.predict(x_holdout_const)
         # final_model = sm.OLS(y_main, x_main_const).fit()
         # Evaluate specifically this model on the holdout set
         #x_holdout_const = sm.add_constant(x_holdout, has_constant="add")
@@ -636,66 +649,46 @@ class regression_controller:
         print(f"Optimal Polynomial Degree: {best_degree} with MSE: {best_mse}")
         return best_degree, best_lr_object
 
-    def plot_linear_regression(self, predictors, outcome, polynomial=True, degree=None):
-        if degree:
-            lr_object = self.linear_regression(
-                predictors, outcome, polynomial=polynomial, degree=degree
-            )
-        else:
-            degree, lr_object = self.optimize_polynomial_degree(predictors, outcome)
+    def plot_linear_regression(self, outcome, polynomial=False, degree=None):
+        if self.model is None:
+            raise ValueError("Model has not been trained yet.")
 
-        poly = lr_object.poly if polynomial else None
+        # Use the final set of features
+        final_features = self.final_features
+        if not final_features:
+            raise ValueError("No features found in the trained model.")
 
-        if polynomial and poly:
-            predictors_poly = pd.DataFrame(
-                poly.transform(predictors),
-                columns=poly.get_feature_names_out(),
-            )
-            predicted_values = lr_object.model.predict(predictors_poly.values)
+        predictors = self.data[final_features]
+        y_true = self.data[outcome]
 
-            # Create a range for each predictor
-            x_range = {
-                col: np.linspace(predictors[col].min(), predictors[col].max(), 100)
-                for col in predictors.columns
-            }
-            x_range_df = pd.DataFrame(x_range)
+        # Predict using the existing model
+        y_pred = self.model.predict(predictors.values)
 
-            # Apply polynomial transformation to the generated range
-            x_range_poly = poly.transform(x_range_df)
-
-            # Predict outcomes for the generated polynomial features
-            y_range = lr_object.model.predict(x_range_poly)
-        else:
-            predicted_values = lr_object.model.predict(predictors.values)
-            x_range = np.linspace(
-                predictors.values.min(), predictors.values.max(), 100
-            ).reshape(-1, 1)
-            y_range = lr_object.model.predict(x_range)
         plt.close("all")
         fig, ax = plt.subplots(figsize=(10, 6))
 
-        ax.scatter(predictors.mean(axis=1), outcome, color="blue", label="True Values")
-        ax.scatter(
-            predictors.mean(axis=1),
-            predicted_values,
-            color="green",
-            label="Predicted Values",
-            marker="x",
-        )
-        ax.plot(x_range_df.mean(axis=1), y_range, color="red", label="Prediction Line")
-        ax.set_xlabel("Composite Predictor")
-        ax.set_ylabel("Outcome")
-        ax.set_title("True vs Predicted Values with Prediction Line")
+        # Scatter plot of actual vs predicted
+        ax.scatter(y_true, y_pred, color="green", label="Predicted vs True")
+
+        # Plot a diagonal line for reference
+        min_val = min(y_true.min(), y_pred.min())
+        max_val = max(y_true.max(), y_pred.max())
+        ax.plot([min_val, max_val], [min_val, max_val], color="red", linestyle="--", label="Ideal Fit")
+
+        ax.set_xlabel("True Values")
+        ax.set_ylabel("Predicted Values")
+        ax.set_title("True vs Predicted Values")
         ax.legend()
 
+        # Calculate metrics
+        mse = mean_squared_error(y_true, y_pred)
+        r2 = r2_score(y_true, y_pred)
+
         summary_text = (
-            f"Average MSE: {lr_object.average_mse}\n"
-            f"R-squared: {lr_object.r_squared}"
-            f"Model Intercept: {lr_object.model.intercept_}\n"
-            f"Model Coefficients: {lr_object.model.coef_}\n"
-            f"95% CI for Coefficients: {lr_object.ci}\n"
-            f"P-value for Coefficients: {lr_object.p_value}\n"
-            f"Beta Coefficients: {lr_object.beta}\n"
+            f"Average MSE: {mse:.4f}\n"
+            f"R-squared: {r2:.4f}\n"
+            f"Model Intercept: {self.model.intercept_}\n"
+            f"Model Coefficients: {self.model.coef_}\n"
         )
 
         return fig, summary_text

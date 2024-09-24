@@ -26,6 +26,8 @@ study.normalized_data = normalized_data
 qc = xmap_qc(study.normalized_data)
 cleaned_proteins = qc.filter_low_variance_proteins(threshold=1e-5)
 qc.plot_variance(top_n=20)
+
+
 # Step 5: Perform Correlation Analysis
 correlation_analyzer = CorrelationAnalyzer(cleaned_proteins, study.patient_data)
 
@@ -55,8 +57,8 @@ visualizer.plot_clustered_heatmap(pearson_corr, figsize=(24,12), title="Pearson 
 visualizer.plot_clustered_heatmap(spearman_corr, figsize=(24,12), title="Spearman Correlation Heatmap", row_cluster=False, cmap="coolwarm").savefig("plots/correlation_spearman.png", dpi=300)
 visualizer.plot_clustered_heatmap(anova_f_stat, figsize=(24,12), title="ANOVA F-Statistic Heatmap", row_cluster=False, cmap="coolwarm").savefig("plots/correlation_anova_f_stat.png", dpi=300)
 
-t_test_results = study.binary_t_test(binary_cols, cleaned_proteins, mapping_dict=mapping_dict)
 mapping_dict = {"Sex": {0:"Female", 1:"Male"}}
+t_test_results = study.binary_t_test(binary_cols, cleaned_proteins, mapping_dict=mapping_dict)
 visualizer.plot_volcano_3d_with_labels(t_test_results, binary_cols, p_value_threshold=0.05)
 visualizer.plot_protein_boxplots_by_category(
     variable="Sex",
@@ -80,6 +82,345 @@ visualizer.plot_protein_boxplots_by_category(
 )
 
 t_test_report = visualizer.generate_significant_report(t_test_results, binary_cols, p_value_threshold=0.05)
+
+#Step 7: Feature Selection
+data = cleaned_proteins.copy()
+vfi_delta = (study.patient_data["VFI_Diagnosis"] - study.patient_data["VFI_3"]).values
+rop = study.patient_data["ROP_Percent"].values
+md_delta = (study.patient_data["MD_Diagnosis"] - study.patient_data["MD_3"]).values
+outcome = md_delta
+
+data["outcome"] = outcome
+
+
+#define predictors and outcome
+predictors = cleaned_proteins.columns.to_list()
+outcome = "ROP_Percent"
+
+feature_selector = FeatureSelector(target_column='outcome')
+data_high_variance = feature_selector.variance_threshold(data, threshold=0.1)
+
+k=20
+selected_features_rf = feature_selector.select_k_features(data, k, model_type='rf')
+selected_features_lasso = feature_selector.select_k_features(data, k, model_type='lasso')
+
+feature_importances = feature_selector.feature_importance(data, model_type='rf')
+feature_importances_lasso = feature_selector.feature_importance(data, model_type='lasso')
+feature_importances_elasticnet = feature_selector.feature_importance(data, model_type='elasticnet')
+
+feature_selector.plot_feature_selection_scores(feature_importances, title="Random Forest Feature Importances")
+
+
+#Step 8: Regression
+reg_model = regression_controller(
+    data=data,
+    split_parameters={"split_type": "kfold", "n_splits": 5},
+    outcome = "ROP_Percent",
+    predictors = selected_features_rf.columns.to_list(),
+)
+reg_model.initialize_split()
+
+acc_threshold = data[outcome].std()
+linear_result = reg_model.linear_regression(
+    predictors=selected_features_rf,
+    outcome=data["ROP_Percent"],
+    confounders=None,          # Add confounders if any
+    polynomial=False,           # Set to True to include polynomial features
+    degree=None,                  # Degree of polynomial
+    holdout=0.1,               # 10% holdout for final evaluation
+    scale=True,                # Whether to scale features
+    accuracy_threshold=acc_threshold,    # Threshold for predictive accuracy
+    backward_elimination=True  # Enable backward elimination based on AIC
+)
+fig = reg_model.plot_linear_regression(linear_result)
+fig.show()
+linear_result.model.summary()
+
+
+#Step 10 - Neural Network
+#from neural_network import FFNNRegressor
+from sklearn.model_selection import train_test_split
+
+combined_data = pd.concat([study.normalized_data, study.patient_data], axis=1)
+combined_data['GPA_encoded'] = label_encoder.fit_transform(combined_data['GPA'])
+combined_data['GPA_encoded'] = combined_data['GPA_encoded'].replace(2, 0)
+
+
+features = study.normalized_data.columns.tolist()
+X = combined_data[features].values
+y = combined_data["GPA_encoded"].values
+
+# Split the data into training and test sets
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
+y_train_tensor = torch.tensor(y_train, dtype=torch.float32).view(-1, 1)
+y_test_tensor = torch.tensor(y_test, dtype=torch.float32).view(-1, 1)
+
+train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+
+class SimpleNN(nn.Module):
+    def __init__(self, input_size, hidden_size1, hidden_size2, output_size):
+        super(SimpleNN, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size1)
+        self.relu1 = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_size1, hidden_size2)
+        self.relu2 = nn.ReLU()
+        self.fc3 = nn.Linear(hidden_size2, output_size)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu1(x)
+        x = self.fc2(x)
+        x = self.relu2(x)
+        x = self.fc3(x)
+        x = torch.sigmoid(x)  # Sigmoid activation function for binary classification
+        return x
+
+input_size = X_train.shape[1]
+hidden_size1 = 64
+hidden_size2 = 32  
+output_size = 1
+
+model = SimpleNN(input_size, hidden_size1, hidden_size2, output_size)
+criterion = nn.BCELoss()  # Binary Cross-Entropy Loss
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+num_epochs = 500
+model.train()
+for epoch in range(num_epochs):
+    epoch_loss = 0
+    for batch_X, batch_y in train_dataloader:
+        optimizer.zero_grad()
+        outputs = model(batch_X)
+        loss = criterion(outputs, batch_y)
+        loss.backward()
+        optimizer.step()
+        epoch_loss += loss.item()
+
+    print(f"Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss/len(train_dataloader)}")
+
+model.eval()
+with torch.no_grad():
+    test_outputs = model(X_test_tensor).numpy()
+    test_auc = roc_auc_score(y_test, test_outputs)
+    print(f"Test AUC: {test_auc}")
+
+    # Generate ROC curve
+    fpr, tpr, thresholds = roc_curve(y_test, test_outputs)
+    plt.figure(figsize=(10, 6))
+    plt.plot(fpr, tpr, color="orange", label=f"AUC = {test_auc:.2f}")
+    plt.plot(
+        [0, 1], [0, 1], linestyle="--", color="black"
+    )  # Diagonal line for random guessing
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curve")
+    plt.legend()
+    plt.show()
+
+def plot_feature_importance(importances, feature_names):
+    indices = np.argsort(importances)
+    plt.figure(figsize=(10, 6))
+    plt.title("Feature Importances")
+    plt.barh(range(len(indices)), importances[indices], align="center")
+    plt.yticks(range(len(indices)), [feature_names[i] for i in indices])
+    plt.xlabel("Relative Importance")
+    plt.show()
+
+from sklearn.inspection import permutation_importance
+result = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42)
+
+
+
+def custom_permutation_importance(model, X, y, n_repeats=10):
+    baseline_outputs = model(torch.tensor(X, dtype=torch.float32)).detach().numpy()
+    baseline_auc = roc_auc_score(y, baseline_outputs)
+
+    importances = np.zeros(X.shape[1])
+
+    for i in range(X.shape[1]):
+        scores = []
+        for _ in range(n_repeats):
+            X_permuted = X.copy()
+            np.random.shuffle(X_permuted[:, i])  # Shuffle the ith feature
+
+            permuted_outputs = (
+                model(torch.tensor(X_permuted, dtype=torch.float32)).detach().numpy()
+            )
+            permuted_auc = roc_auc_score(y, permuted_outputs)
+
+            # Decrease in AUC score due to permutation
+            scores.append(baseline_auc - permuted_auc)
+
+        importances[i] = np.mean(scores)
+
+    return importances
+
+
+# Compute the custom permutation importances
+importances = custom_permutation_importance(model, X_test, y_test, n_repeats=10)
+
+# Plot the feature importances
+plot_feature_importance(importances, features)
+# from sklearn.preprocessing import LabelEncoder
+
+# # Initialize the label encoder
+# label_encoder = LabelEncoder()
+
+# # Fit and transform the target labels
+# #make sure all of gpa is lowercase
+# combined_data['GPA'] = combined_data['GPA'].str.lower()
+# combined_data['GPA_encoded'] = label_encoder.fit_transform(combined_data['GPA'])
+# # Verify the encoding
+# print(combined_data[['GPA', 'GPA_encoded']].drop_duplicates())
+# features = study.normalized_data.columns.tolist()
+# target = "ROP_Percent"
+
+# #change any 2 to 0
+# combined_data.to_csv("data/combined_data.csv")
+
+# # features = study.normalized_data.columns.tolist()
+# # features = selected_features_rf.columns.tolist()
+# # features.extend(["VA", "MD_Diagnosis", "Sex"])
+
+# # target = "GPA_encoded"
+
+# model = NeuralNetworkModel(
+#     data_path = "data/combined_data.csv",
+#     features = features,
+#     target = target,
+#     hidden_size = 64,
+#     n_layers = 2,
+#     lr=0.001,
+#     batch_size=16,
+#     num_epochs=1000,
+#     random_state=42,
+#     dropout_rate=0.2
+# )
+# model.run()
+# model
+# linear_result.model.model.exog_names
+# reg_model.final_features
+# linear_result.average_mse
+# linear_result.average_r2
+# linear_result.accuracy
+# linear_result.plot_data
+# linear_result.model_mse
+
+
+# # Step 9: Plot the Regression Results
+
+# y_true = linear_result.plot_data["y_holdout"]
+# y_pred = linear_result.plot_data["y_pred"]
+# import matplotlib.pyplot as plt
+# fig, ax = plt.subplots(figsize=(12, 8))
+# ax.scatter(y_true, y_pred, color="blue", alpha=0.6)
+# # Plot the ideal fit line
+# min_val = min(y_true.min(), y_pred.min())
+# max_val = max(y_true.max(), y_pred.max())
+# ax.plot([min_val, max_val], [min_val, max_val], color="red", linestyle="--", label="Ideal Fit (y = x)")
+
+
+# # Set plot labels and title
+# ax.set_xlabel("True Values")
+# ax.set_ylabel("Predicted Values")
+# ax.set_title("True vs. Predicted Values")
+
+# # Add legend
+# ax.legend()
+
+# #show the plot
+# plt.show()
+
+# import itertools
+# import pandas as pd
+# from classes.lr_command import regression_controller, LinearRegressionResult
+
+# def evaluate_combinations(
+#     lr_command, custom_outcome=None, max_predictors=None, polynomial=False
+# ):
+#     """
+#     Evaluate all combinations of the assigned predictors for a given outcome or a custom outcome using an existing lr_command object.
+
+#     :param lr_command: An instance of the regression_controller class with predictors already assigned.
+#     :param custom_outcome: A custom outcome vector to use instead of the assigned outcome (optional).
+#     :param max_predictors: The maximum number of predictors to include in combinations.
+#     :return: A DataFrame ranking the combinations by R-squared or MSE.
+#     """
+#     # Extract the assigned predictors and confounders
+#     predictors = lr_command.predictors
+#     confounders = lr_command.confounders
+
+#     all_predictors = predictors.copy()
+#     # If max_predictors is None, use the full length of predictors list
+#     if max_predictors is None:
+#         max_predictors = len(predictors) + len(confounders)
+#     if max_predictors < len(predictors):
+#         raise ValueError(
+#             "max_predictors must be greater than or equal to the number of predictors"
+#         )
+#     # Determine the outcome to use
+#     outcome = (
+#         custom_outcome
+#         if custom_outcome is not None
+#         else lr_command.data[lr_command.outcome]
+#     )
+
+#     # Store results
+#     results = []
+
+#     # Iterate through all possible combinations of predictors
+#     for r in range(0, max_predictors - len(predictors) + 1):
+#         for confounder_combo in itertools.combinations(confounders, r):
+#             # Convert combination to list and use it as the current set of predictors
+#             combo_list = all_predictors + list(confounder_combo)
+#             if polynomial:
+#                 print(f"{combo_list}, {outcome}")
+#                 best_degree, _ = lr_command.optimize_polynomial_degree(
+#                     predictors=lr_command.data[combo_list],
+#                     outcome=outcome,
+#                     max_degree=4,
+#                 )
+#             # Run linear regression with the current combination of predictors
+#             result = lr_command.linear_regression(
+#                 predictors=lr_command.data[combo_list],
+#                 outcome=outcome,
+#                 polynomial=polynomial,
+#                 degree=best_degree if polynomial else None,
+#             )
+#             # check the p_values
+#             # if all p values are greater than 0.05:
+#             if all([p < 0.05 for p in result.p_value]):
+#                 significance = "All"
+#             elif any([p < 0.05 for p in result.p_value]):
+#                 significance = "Some"
+#             else:
+#                 significance = "None"
+
+#             # Store the results
+#             results.append(
+#                 {
+#                     "Predictors": combo_list,
+#                     "R-squared": result.average_r2,
+#                     "MSE": result.average_mse,
+#                     "Equation": result.equation,
+#                     "P-Value": result.p_value,
+#                     "Significance": significance,
+#                     "Degree": best_degree if polynomial else None,
+#                 }
+#             )
+
+#     # Convert results to DataFrame and rank by R-squared or MSE
+#     results_df = pd.DataFrame(results)
+#     results_df = results_df.sort_values(by="R-squared", ascending=False)
+
+#     return results_df
+
+
 
 
 

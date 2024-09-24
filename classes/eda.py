@@ -464,7 +464,7 @@ class Visualizer:
         except Exception as e:
             logging.error(f"Error plotting boxplot: {e}")
 
-    def plot_volcano_3d_with_labels(self, t_test_results: pd.DataFrame, binary_cols: list, p_value_threshold: float = None):
+    def plot_volcano_3d_with_labels(self, t_test_results: pd.DataFrame, binary_cols: list, p_value_threshold: float = None, save_html: bool = False, filename: str = "volcano_plot.html"):
         """
         Creates a 3D volcano plot for multiple binary attributes with persistent labels for significant proteins.
 
@@ -557,6 +557,13 @@ class Visualizer:
 
         # Show plot
         fig.show()
+        # Save plot as HTML if requested
+        if save_html:
+            try:
+                fig.write_html(filename)
+                logging.info(f"Interactive plot saved as {filename}")
+            except Exception as e:
+                logging.error(f"Failed to save plot as HTML: {e}")
 
     def generate_significant_report(self, t_test_results: pd.DataFrame, binary_cols: list, p_value_threshold: float = 0.05, output_path: str = None) -> pd.DataFrame:
             """

@@ -1,16 +1,9 @@
-import os
 import pandas as pd
-import numpy as np
 from pathlib import Path
-from scipy.stats import boxcox
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import PowerTransformer
-from statsmodels.robust.scale import huber
-from classes.normalizer import Normalizer
 from classes.openai_calls import xmap_openai
 from classes.xmap_qc import xmap_qc
 import json
-from classes.eda import GroupComparator
+from classes.group_comparator import GroupComparator
 import logging
 import seaborn as sns
 import matplotlib.pyplot as plt

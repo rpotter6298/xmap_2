@@ -1,5 +1,5 @@
 from neo4j import GraphDatabase
-from modules.logbook import setup_class_logger
+from classes.logbook import setup_class_logger
 from neo4j.exceptions import TransientError
 import time
 

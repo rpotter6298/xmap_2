@@ -6,3 +6,5 @@ to_do/
 data/
 keys/
 logs/
+.conda/
+.ipynb_checkpoints/

@@ -339,7 +339,7 @@ for key, result in permanova_results.items():
         permanova_tables[key].loc[len(permanova_tables[key])] = line_vals
 
 
-def create_combined_table_bold_headers(cca_tables, permanova_tables):
+def create_combined_table_bold_headers(cca_tables, permanova_tables, save_path=None, figsize=(10, 8)):
     """
     Creates a combined table for CCA and PERMANOVA results, reporting only Variables and P-Values,
     with bold headers and row names, and minimal whitespace between tables.
@@ -373,7 +373,7 @@ def create_combined_table_bold_headers(cca_tables, permanova_tables):
     permanova_combined["P-Value (Cluster 2)"] = permanova_tables["Cluster 2"]["P-value"].values
 
     # Plot combined tables
-    fig = plt.figure(figsize=(10, 8))
+    fig = plt.figure(figsize=figsize)
     gs = GridSpec(2, 1, figure=fig, height_ratios=[1, 1])
 
     # Add CCA Table
@@ -431,8 +431,110 @@ def create_combined_table_bold_headers(cca_tables, permanova_tables):
     # Adjust layout to minimize whitespace
     plt.subplots_adjust(hspace=0)  # Further reduced top spacing
     # plt.tight_layout()
-    plt.show()
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+    else:   
+        plt.show()
 
+def create_combined_table_bold_headers(cca_tables, permanova_tables, save_path=None, figsize=(10, 8)):
+    """
+    Creates a combined table for CCA and PERMANOVA results, reporting only Variables and P-Values,
+    with bold headers and row names, and highlights significant P-values (< 0.05).
 
-create_combined_table_bold_headers(cca_tables, permanova_tables)
+    Args:
+        cca_tables (dict): Dictionary with CCA dataframes for "Full Set", "Cluster 1", and "Cluster 2".
+        permanova_tables (dict): Dictionary with PERMANOVA dataframes for "Full Set", "Cluster 1", and "Cluster 2".
+        save_path (str, optional): File path to save the plot. If None, the plot is displayed.
+        figsize (tuple, optional): Size of the figure.
+
+    Returns:
+        None
+    """
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from matplotlib.gridspec import GridSpec
+
+    def preprocess_table(table, column_name="P-value"):
+        # Ensure "P-value" column is numeric and handle invalid values
+        table[column_name] = pd.to_numeric(table[column_name], errors='coerce')
+        return table
+
+    # Preprocess tables to ensure numeric P-values
+    for key in cca_tables:
+        cca_tables[key] = preprocess_table(cca_tables[key])
+    for key in permanova_tables:
+        permanova_tables[key] = preprocess_table(permanova_tables[key])
+
+    # Prepare combined data for CCA
+    cca_combined = cca_tables["Full Set"][["Variable", "P-value"]].rename(columns={"P-value": "P-Value (Full Set)"})
+    cca_combined["P-Value (Cluster 1)"] = cca_tables["Cluster 1"]["P-value"].values
+    cca_combined["P-Value (Cluster 2)"] = cca_tables["Cluster 2"]["P-value"].values
+
+    # Prepare combined data for PERMANOVA
+    permanova_combined = permanova_tables["Full Set"][["Variable", "P-value"]].rename(columns={"P-value": "P-Value (Full Set)"})
+    permanova_combined["P-Value (Cluster 1)"] = permanova_tables["Cluster 1"]["P-value"].values
+    permanova_combined["P-Value (Cluster 2)"] = permanova_tables["Cluster 2"]["P-value"].values
+
+    # Plot combined tables
+    fig = plt.figure(figsize=figsize)
+    gs = GridSpec(2, 1, figure=fig, height_ratios=[1, 1])
+
+    # Add CCA Table
+    ax_cca = fig.add_subplot(gs[0, 0])
+    ax_cca.axis('off')
+    ax_cca.set_title("CCA Results", fontsize=14, weight='bold', pad=10)
+    cca_table = ax_cca.table(
+        cellText=cca_combined.values,
+        colLabels=cca_combined.columns,
+        cellLoc='center',
+        loc='center'
+    )
+    cca_table.auto_set_font_size(False)
+    cca_table.set_fontsize(10)
+    cca_table.auto_set_column_width(col=list(range(len(cca_combined.columns))))
+
+    # Highlight significant P-values in CCA Table
+    for (i, j), cell in cca_table.get_celld().items():
+        if i == 0:  # Header row
+            cell.set_text_props(weight='bold')
+        elif j == 0:  # Variable names column
+            cell.set_text_props(weight='bold')
+        elif i > 0 and j > 0:  # Data cells
+            p_value = cca_combined.iloc[i - 1, j]
+            if pd.notnull(p_value) and p_value < 0.05:
+                cell.set_facecolor('#ffcccc')  # Light red for significance
+
+    # Add PERMANOVA Table
+    ax_permanova = fig.add_subplot(gs[1, 0])
+    ax_permanova.axis('off')
+    ax_permanova.set_title("PERMANOVA Results", fontsize=14, weight='bold', pad=10)
+    permanova_table = ax_permanova.table(
+        cellText=permanova_combined.values,
+        colLabels=permanova_combined.columns,
+        cellLoc='center',
+        loc='center'
+    )
+    permanova_table.auto_set_font_size(False)
+    permanova_table.set_fontsize(10)
+    permanova_table.auto_set_column_width(col=list(range(len(permanova_combined.columns))))
+
+    # Highlight significant P-values in PERMANOVA Table
+    for (i, j), cell in permanova_table.get_celld().items():
+        if i == 0:  # Header row
+            cell.set_text_props(weight='bold')
+        elif j == 0:  # Variable names column
+            cell.set_text_props(weight='bold')
+        elif i > 0 and j > 0:  # Data cells
+            p_value = permanova_combined.iloc[i - 1, j]
+            if pd.notnull(p_value) and p_value < 0.05:
+                cell.set_facecolor('#ffcccc')  # Light red for significance
+
+    # Adjust layout to minimize whitespace
+    plt.subplots_adjust(hspace=0.5)
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+    else:
+        plt.show()
+
+create_combined_table_bold_headers(cca_tables, permanova_tables, figsize=(10,12))
 

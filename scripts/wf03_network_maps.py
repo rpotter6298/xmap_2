@@ -76,93 +76,7 @@ def construct_protein_network(grapher, proteins, min_strength=0.5, threshold=Non
 
     return G, important_nodes
 
-def visualize_protein_network(G, MPI, start_nodes, study_proteins, threshold=3, figsize=(12, 10), file_path=None):
-    """
-    Visualizes the protein interaction network with shortest paths highlighted.
-
-    Parameters:
-    - G: A NetworkX graph of the protein interaction network.
-    - MPI: Dictionary of nodes with degrees above the threshold (Multiple Path Intersections).
-    - start_nodes: List of starting protein IDs of interest (highlighted in orange).
-    - study_proteins: List of protein IDs to highlight with a green ring.
-    - threshold: Degree threshold for highlighting nodes that appear in multiple shortest paths.
-    - figsize: Size of the figure for visualization.
-    - file_path: Path to save the visualization as a file. If None, displays the plot.
-
-    Returns:
-    - None
-    """
-    import matplotlib.pyplot as plt
-    import networkx as nx
-
-    highlighted_nodes = set(start_nodes)
-    study_proteins_set = set(study_proteins)
-
-    # Set node colors, sizes, and edge colors for visualization
-    node_colors = []
-    node_sizes = []
-    node_edgecolors = []
-    for node in G.nodes():
-        if node in highlighted_nodes:
-            color = "orange"
-            size = 600
-        elif node in MPI:
-            color = "red"
-            size = 800
-        else:
-            color = "skyblue"
-            size = 400
-        node_colors.append(color)
-        node_sizes.append(size)
-
-        # Set edge color to green if the node is in study_proteins; otherwise, no edge
-        if node in study_proteins_set:
-            edgecolor = "greenyellow"
-        else:
-            edgecolor = 'none'  # No edge color
-        node_edgecolors.append(edgecolor)
-
-    # Plot the network
-    plt.figure(figsize=figsize)
-    pos = nx.spring_layout(G)
-    nx.draw(
-        G,
-        pos,
-        with_labels=True,
-        node_color=node_colors,
-        node_size=node_sizes,
-        edge_color="gray",
-        font_size=8,
-        font_weight="bold",
-        edgecolors=node_edgecolors,
-        linewidths=2,
-    )
-
-    # Create custom legend
-    from matplotlib.lines import Line2D
-
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', label='Start Nodes (Highlighted Proteins)', 
-               markerfacecolor='orange', markersize=10),
-        Line2D([0], [0], marker='o', color='w', label='MPI (High-Degree Proteins)', 
-               markerfacecolor='red', markersize=10),
-        Line2D([0], [0], marker='o', color='w', label='Other Proteins', 
-               markerfacecolor='skyblue', markersize=10),
-        Line2D([0], [0], marker='o', markeredgecolor='greenyellow', markerfacecolor='white', label='Proteins included in study',
-               markersize=10, linewidth=2),
-    ]
-
-    plt.legend(handles=legend_elements, loc='best')
-    plt.title("Protein Interaction Network with Study Proteins Highlighted")
-
-    # Save or show the plot
-    if file_path:
-        plt.savefig(file_path, format='png', bbox_inches='tight')
-        print(f"Visualization saved to {file_path}")
-    else:
-        plt.show()
-
-def visualize_protein_network(G, MPI, start_nodes, study_proteins, threshold=3, figsize=(12, 10), file_path=None):
+def visualize_protein_network(G, MPI, start_nodes, study_proteins, threshold=3, figsize=(12, 10), file_path=None, title = "Protein Interaction Network with Study Proteins Highlighted"):
     """
     Visualizes the protein interaction network with appropriate colors, shapes, sizes, and a single combined legend.
 
@@ -291,7 +205,7 @@ def visualize_protein_network(G, MPI, start_nodes, study_proteins, threshold=3, 
         title_fontsize=16,
     )
 
-    plt.title("Protein Interaction Network with Study Proteins Highlighted")
+    plt.title(title, fontsize=16)
 
     # Save or show the plot
     if file_path:
@@ -302,25 +216,52 @@ def visualize_protein_network(G, MPI, start_nodes, study_proteins, threshold=3, 
 
 
 G, MPI = construct_protein_network(grapher, proteins=correlation_dict["Proteins"])
-visualize_protein_network(G, MPI=MPI,  start_nodes=correlation_dict["Proteins"], study_proteins=study_proteins)
-print("STMN4" in G.nodes())
-
+visualize_protein_network(
+    G, MPI=MPI,  
+    start_nodes=correlation_dict["Proteins"], 
+    study_proteins=study_proteins, figsize=(24,24), 
+    file_path="plots/network_proteins.png", title="Shortest Path Network of Highly Correlated Proteins")
 
 G_cluster_2, MPI_cluster_2 = construct_protein_network(grapher, proteins=cluster_2_proteins)
-visualize_protein_network(G_cluster_2, MPI=MPI_cluster_2,  start_nodes=cluster_2_proteins, study_proteins=study_proteins)
+visualize_protein_network(
+    G_cluster_2, MPI=MPI_cluster_2,  
+    start_nodes=cluster_2_proteins, 
+    study_proteins=study_proteins, figsize=(24,24),
+    file_path="plots/network_cluster_2.png", title="Shortest Path Network of Cluster 2 Proteins")
 
 G_cluster_1, MPI_cluster_1 = construct_protein_network(grapher, proteins=cluster_1_proteins)
-visualize_protein_network(G_cluster_1, MPI=MPI_cluster_1,  start_nodes=cluster_1_proteins, study_proteins=study_proteins)
+visualize_protein_network(
+    G_cluster_1, MPI=MPI_cluster_1, 
+    start_nodes=cluster_1_proteins, 
+    study_proteins=study_proteins, figsize=(24,24),
+    file_path="plots/network_cluster_1.png", title="Shortest Path Network of Cluster 1 Proteins")
 
 G_se, MPI_se = construct_protein_network(grapher, proteins=correlation_dict["SE"])
-visualize_protein_network(G_se, MPI=MPI_se,  start_nodes=correlation_dict["SE"], study_proteins=study_proteins)
+visualize_protein_network(
+    G_se, MPI=MPI_se, 
+    start_nodes=correlation_dict["SE"], 
+    study_proteins=study_proteins, figsize=(24,24),
+    file_path="plots/network_se.png", title="Shortest Path Network of Top 10 Proteins correlated with SE")
 
 G_vfi, MPI_vfi = construct_protein_network(grapher, proteins=correlation_dict["VFI_Loss"])
-visualize_protein_network(G_vfi, MPI=MPI_vfi,  start_nodes=correlation_dict["VFI_Loss"], study_proteins=study_proteins)
+visualize_protein_network(
+    G_vfi, MPI=MPI_vfi, 
+    start_nodes=correlation_dict["VFI_Loss"], 
+    study_proteins=study_proteins, figsize=(24,24),
+    file_path="plots/network_vfi_loss.png", title="Shortest Path Network of Top 10 Proteins correlated with VFI Loss")
 
 G_iop, MPI_iop = construct_protein_network(grapher, proteins=correlation_dict["IOP_Diagnosis"])
-visualize_protein_network(G_iop, MPI=MPI_iop,  start_nodes=correlation_dict["IOP_Diagnosis"], study_proteins=study_proteins)
+visualize_protein_network(
+    G_iop, MPI=MPI_iop, 
+    start_nodes=correlation_dict["IOP_Diagnosis"], 
+    study_proteins=study_proteins, figsize=(24,24),
+    file_path="plots/network_iop_diagnosis.png", title="Shortest Path Network of Top 10 Proteins correlated with IOP at Diagnosis")
 
 G_MD, MPI_MD = construct_protein_network(grapher, proteins=correlation_dict["MD_Diagnosis"])
-visualize_protein_network(G_MD, MPI=MPI_MD,  start_nodes=correlation_dict["MD_Diagnosis"], study_proteins=study_proteins)
+visualize_protein_network(
+    G_MD, MPI=MPI_MD, 
+    start_nodes=correlation_dict["MD_Diagnosis"], 
+    study_proteins=study_proteins, figsize=(24,24),
+    file_path="plots/network_md_diagnosis.png", title="Shortest Path Network of Top 10 Proteins correlated with MD at Diagnosis")
+
 

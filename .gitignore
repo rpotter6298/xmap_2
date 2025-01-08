@@ -1,6 +1,6 @@
 .vscode/
 .archive/
-plots/
+# plots/
 reports/
 to_do/
 data/
